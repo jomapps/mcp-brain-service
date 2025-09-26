@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__byterover-mcp__byterover-retrieve-knowledge",
+      "mcp__byterover-mcp__byterover-store-knowledge",
+      "Bash(powershell:*)",
+      "Bash(dir)",
+      "Bash(mkdir:*)",
+      "Bash(python -m poetry init:*)",
+      "Bash(poetry --version)",
+      "Bash(python -m pip install:*)",
+      "Bash(python -m pytest tests/contract/test_websocket.py::TestWebSocketContracts::test_create_character_contract -v)",
+      "Bash(python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
