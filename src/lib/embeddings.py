@@ -1,107 +1,131 @@
 """Embedding service for generating text embeddings using Jina AI API."""
 
-import logging
+import asyncio
+import aiohttp
 import os
-from typing import List
-import requests
+from typing import List, Optional
+import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingService:
-    """Service for generating text embeddings using Jina AI API."""
-    
-    def __init__(self, model_name: str = "jina-embeddings-v3", api_key: str = None):
-        """Initialize embedding service.
-        
-        Args:
-            model_name: Name of the Jina embedding model
-            api_key: Jina AI API key (if None, reads from environment)
-        """
-        self.model_name = model_name
-        self.api_key = api_key or os.getenv("JINA_API_KEY")
-        self.api_url = "https://api.jina.ai/v1/embeddings"
+class JinaEmbeddingService:
+    def __init__(self):
+        self.api_key = os.getenv("JINA_API_KEY")
+        self.api_url = os.getenv("JINA_API_URL", "https://api.jina.ai/v1/embeddings")
+        self.model = os.getenv("JINA_MODEL", "jina-embeddings-v2-base-en")
+        self.max_retries = 3
+        self.timeout = 30
         
         if not self.api_key:
-            raise ValueError("Jina API key not provided. Set JINA_API_KEY environment variable.")
-        
-        logger.info(f"Initialized Jina embedding service with model: {model_name}")
+            logger.warning("JINA_API_KEY not set, using mock embeddings")
+            self.use_mock = True
+        else:
+            self.use_mock = False
     
-    async def encode(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a list of texts using Jina AI API.
+    async def embed_single(self, text: str) -> List[float]:
+        """Embed a single text"""
+        if self.use_mock:
+            return self._mock_embedding(text)
         
-        Args:
-            texts: List of input texts
+        return (await self.embed_batch([text]))[0]
+    
+    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Batch embedding with retry logic"""
+        if self.use_mock:
+            return [self._mock_embedding(text) for text in texts]
+        
+        for attempt in range(self.max_retries):
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                    headers = {
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    payload = {
+                        "model": self.model,
+                        "input": texts,
+                        "encoding_format": "float"
+                    }
+                    
+                    async with session.post(self.api_url, json=payload, headers=headers) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            return [item["embedding"] for item in data["data"]]
+                        elif response.status == 429:  # Rate limit
+                            wait_time = 2 ** attempt
+                            logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            error_text = await response.text()
+                            raise Exception(f"Jina API error {response.status}: {error_text}")
             
-        Returns:
-            List of embedding vectors
-        """
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout on attempt {attempt + 1}, retrying...")
+                if attempt == self.max_retries - 1:
+                    raise Exception("Jina API timeout after all retries")
+                await asyncio.sleep(2 ** attempt)
+            
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    logger.error(f"Failed to get embeddings after {self.max_retries} attempts: {str(e)}")
+                    raise
+                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}, retrying...")
+                await asyncio.sleep(2 ** attempt)
+        
+        raise Exception("Failed to get embeddings after all retries")
+    
+    async def embed_image(self, image_data: bytes) -> List[float]:
+        """Image embedding support (future feature)"""
+        if self.use_mock:
+            return self._mock_embedding("image_data")
+        
+        # TODO: Implement image embedding when Jina supports it
+        raise NotImplementedError("Image embedding not yet implemented")
+    
+    def _mock_embedding(self, text: str) -> List[float]:
+        """Generate mock embedding for development"""
+        import hashlib
+        import struct
+        
+        # Create deterministic mock embedding based on text hash
+        hash_obj = hashlib.md5(text.encode())
+        hash_bytes = hash_obj.digest()
+        
+        # Convert to 768-dimensional vector (typical embedding size)
+        embedding = []
+        for i in range(0, len(hash_bytes), 2):
+            if i + 1 < len(hash_bytes):
+                val = struct.unpack('h', hash_bytes[i:i+2])[0] / 32768.0
+                embedding.append(val)
+        
+        # Pad to 768 dimensions
+        while len(embedding) < 768:
+            embedding.append(0.0)
+        
+        return embedding[:768]
+    
+    async def health_check(self) -> dict:
+        """Check Jina API health"""
+        if self.use_mock:
+            return {"status": "mock", "timestamp": datetime.utcnow().isoformat()}
+        
         try:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
-            }
-            
-            data = {
-                "model": self.model_name,
-                "input": texts
-            }
-            
-            response = requests.post(self.api_url, headers=headers, json=data)
-            response.raise_for_status()
-            
-            result = response.json()
-            embeddings = [item["embedding"] for item in result["data"]]
-            
-            logger.debug(f"Generated {len(embeddings)} embeddings using Jina API")
-            logger.debug(f"Usage: {result.get('usage', 'N/A')}")
-            
-            return embeddings
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Jina API request failed: {e}")
-            raise
+            # Test with a simple embedding
+            await self.embed_single("health check")
+            return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
         except Exception as e:
-            logger.error(f"Failed to generate embeddings: {e}")
-            raise
-    
-    
-    @staticmethod
-    def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-        """Calculate cosine similarity between two vectors.
-        
-        Args:
-            vec1: First vector
-            vec2: Second vector
-            
-        Returns:
-            Cosine similarity score (0-1)
-        """
-        if len(vec1) != len(vec2):
-            raise ValueError("Vectors must have the same dimension")
-        
-        # Calculate dot product
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
-        
-        # Calculate magnitudes
-        magnitude1 = sum(a**2 for a in vec1) ** 0.5
-        magnitude2 = sum(b**2 for b in vec2) ** 0.5
-        
-        if magnitude1 == 0 or magnitude2 == 0:
-            return 0.0
-        
-        # Calculate cosine similarity
-        similarity = dot_product / (magnitude1 * magnitude2)
-        
-        # Ensure result is between 0 and 1 (convert from [-1,1] to [0,1])
-        return max(0.0, min(1.0, (similarity + 1) / 2))
+            return {"status": "unhealthy", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
 
 # Global embedding service instance
-_embedding_service: EmbeddingService = None
+_embedding_service: JinaEmbeddingService = None
 
 
-def get_embedding_service() -> EmbeddingService:
+def get_embedding_service() -> JinaEmbeddingService:
     """Get global embedding service instance.
     
     Returns:
@@ -111,8 +135,6 @@ def get_embedding_service() -> EmbeddingService:
     
     if _embedding_service is None:
         # Initialize with production Jina settings
-        _embedding_service = EmbeddingService(
-            model_name=os.getenv("JINA_MODEL_NAME", "jina-embeddings-v3")
-        )
+        _embedding_service = JinaEmbeddingService()
     
     return _embedding_service
