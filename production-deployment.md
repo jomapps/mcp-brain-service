@@ -13,10 +13,10 @@ This guide describes how to deploy MCP Brain Service (FastAPI + WebSocket) to a 
 ## 1) Prerequisites
 1. Ubuntu 22.04+ server (2 vCPU / 2–4 GB RAM recommended)
 2. Root or sudo SSH access
-3. A domain/subdomain for Coolify (e.g., `coolify.example.com`) and one for the app (e.g., `brain.example.com`)
+3. A domain/subdomain for Coolify (e.g., `coolify.example.com`) and one for the app (`brain.ft.tc`)
 4. DNS A records pointing to your server’s public IP:
    - `coolify.example.com` → server IP
-   - `brain.example.com` → server IP
+   - `brain.ft.tc` → server IP
 5. Open ports in your firewall: 22 (SSH), 80 (HTTP), 443 (HTTPS)
 
 ---
@@ -119,7 +119,7 @@ Record your connection details:
    - Context: `./`
 4. Ports & networking:
    - Internal port: `8002` (matches Dockerfile `EXPOSE` and default `PORT`)
-   - Attach a domain: `brain.example.com` (Coolify will provision Let’s Encrypt automatically)
+   - Attach a domain: `brain.ft.tc` (Coolify will provision Let’s Encrypt automatically)
 5. Environment variables (Environment tab):
    - `PORT=8002`
    - (Optional) `NEO4J_URI=neo4j://host:7687`
@@ -133,8 +133,8 @@ Save these settings.
 ## 6) First deploy
 1. Click “Deploy” in the application page.
 2. Wait for image build → container start → health checks.
-3. Verify health endpoint: `https://brain.example.com/health` should return `{"status":"healthy"}`.
-4. WebSocket: ensure your client uses `wss://brain.example.com/` in production.
+3. Verify health endpoint: `https://brain.ft.tc/health` should return `{"status":"healthy"}`.
+4. WebSocket: ensure your client uses `wss://brain.ft.tc/` in production.
 
 ---
 
