@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from typing import Any, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -26,12 +27,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure CORS origins based on environment
+# Get allowed origins from environment or use defaults
+allowed_origins = os.getenv(
+    "CORS_ORIGINS", 
+    "http://localhost:3010,https://auto-movie.ngrok.pro,https://auto-movie.ft.tc"
+).split(",")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
