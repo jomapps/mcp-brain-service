@@ -17,25 +17,25 @@ class JinaEmbeddingService:
         self.model = os.getenv("JINA_MODEL", "jina-embeddings-v2-base-en")
         self.max_retries = 3
         self.timeout = 30
-        
+
         if not self.api_key:
             logger.warning("JINA_API_KEY not set, using mock embeddings")
             self.use_mock = True
         else:
             self.use_mock = False
-    
+
     async def embed_single(self, text: str) -> List[float]:
         """Embed a single text"""
         if self.use_mock:
             return self._mock_embedding(text)
-        
+
         return (await self.embed_batch([text]))[0]
-    
+
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Batch embedding with retry logic"""
         if self.use_mock:
             return [self._mock_embedding(text) for text in texts]
-        
+
         for attempt in range(self.max_retries):
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
@@ -43,13 +43,19 @@ class JinaEmbeddingService:
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json"
                     }
-                    
-                    payload = {
-                        "model": self.model,
-                        "input": texts,
-                        "encoding_format": "float"
-                    }
-                    
+
+                    if str(self.model).startswith("jina-embeddings-v4"):
+                        payload = {
+                            "model": self.model,
+                            "input": [{"text": t} for t in texts]
+                        }
+                    else:
+                        payload = {
+                            "model": self.model,
+                            "input": texts,
+                            "encoding_format": "float"
+                        }
+
                     async with session.post(self.api_url, json=payload, headers=headers) as response:
                         if response.status == 200:
                             data = await response.json()
@@ -62,57 +68,57 @@ class JinaEmbeddingService:
                         else:
                             error_text = await response.text()
                             raise Exception(f"Jina API error {response.status}: {error_text}")
-            
+
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout on attempt {attempt + 1}, retrying...")
                 if attempt == self.max_retries - 1:
                     raise Exception("Jina API timeout after all retries")
                 await asyncio.sleep(2 ** attempt)
-            
+
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     logger.error(f"Failed to get embeddings after {self.max_retries} attempts: {str(e)}")
                     raise
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}, retrying...")
                 await asyncio.sleep(2 ** attempt)
-        
+
         raise Exception("Failed to get embeddings after all retries")
-    
+
     async def embed_image(self, image_data: bytes) -> List[float]:
         """Image embedding support (future feature)"""
         if self.use_mock:
             return self._mock_embedding("image_data")
-        
+
         # TODO: Implement image embedding when Jina supports it
         raise NotImplementedError("Image embedding not yet implemented")
-    
+
     def _mock_embedding(self, text: str) -> List[float]:
         """Generate mock embedding for development"""
         import hashlib
         import struct
-        
+
         # Create deterministic mock embedding based on text hash
         hash_obj = hashlib.md5(text.encode())
         hash_bytes = hash_obj.digest()
-        
+
         # Convert to 768-dimensional vector (typical embedding size)
         embedding = []
         for i in range(0, len(hash_bytes), 2):
             if i + 1 < len(hash_bytes):
                 val = struct.unpack('h', hash_bytes[i:i+2])[0] / 32768.0
                 embedding.append(val)
-        
+
         # Pad to 768 dimensions
         while len(embedding) < 768:
             embedding.append(0.0)
-        
+
         return embedding[:768]
-    
+
     async def health_check(self) -> dict:
         """Check Jina API health"""
         if self.use_mock:
             return {"status": "mock", "timestamp": datetime.utcnow().isoformat()}
-        
+
         try:
             # Test with a simple embedding
             await self.embed_single("health check")
@@ -121,20 +127,42 @@ class JinaEmbeddingService:
             return {"status": "unhealthy", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
 
+
+class EmbeddingService:
+    """Thin adapter interface around JinaEmbeddingService used by the app."""
+    def __init__(self, backend: Optional[JinaEmbeddingService] = None):
+        self.backend = backend or JinaEmbeddingService()
+
+    async def encode(self, texts: List[str]) -> List[List[float]]:
+        """Encode a list of texts into embeddings."""
+        return await self.backend.embed_batch(texts)
+
+    @staticmethod
+    def cosine_similarity(a: List[float], b: List[float]) -> float:
+        import math
+        if not a or not b:
+            return 0.0
+        dot = sum(x * y for x, y in zip(a, b))
+        na = math.sqrt(sum(x * x for x in a))
+        nb = math.sqrt(sum(y * y for y in b))
+        if na == 0 or nb == 0:
+            return 0.0
+        return dot / (na * nb)
+
 # Global embedding service instance
-_embedding_service: JinaEmbeddingService = None
+_embedding_service: EmbeddingService = None
 
 
-def get_embedding_service() -> JinaEmbeddingService:
+def get_embedding_service() -> EmbeddingService:
     """Get global embedding service instance.
-    
+
     Returns:
         Embedding service instance
     """
     global _embedding_service
-    
+
     if _embedding_service is None:
-        # Initialize with production Jina settings
-        _embedding_service = JinaEmbeddingService()
-    
+        # Initialize adapter backed by JinaEmbeddingService
+        _embedding_service = EmbeddingService()
+
     return _embedding_service
