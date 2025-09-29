@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -97,7 +98,10 @@ async def root() -> Dict[str, str]:
 @app.get("/health")
 async def health() -> Dict[str, str]:
     """Health check endpoint."""
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
 
 
 @app.websocket("/")
