@@ -58,6 +58,8 @@ class SearchResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+    service: str
+    version: str
     timestamp: str
 
 # API key validation
@@ -81,6 +83,8 @@ async def health_check():
     from datetime import datetime
     return {
         "status": "healthy",
+        "service": "MCP Brain Service",
+        "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 

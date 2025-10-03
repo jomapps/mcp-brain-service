@@ -104,6 +104,8 @@ async def health() -> Dict[str, str]:
     """Health check endpoint."""
     return {
         "status": "healthy",
+        "service": "MCP Brain Service",
+        "version": "1.0.0",
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
