@@ -13,6 +13,7 @@ from src.services.character_service import CharacterService
 from src.models.character import CharacterCreate
 from src.lib.database import get_neo4j_connection, close_neo4j_connection
 from src.lib.embeddings import get_embedding_service
+from src.api_routes import router as api_router
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# Include REST API routes
+app.include_router(api_router)
 
 # Initialize services - will be configured on startup
 character_service = None

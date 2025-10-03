@@ -108,3 +108,13 @@ class Neo4jClient:
         """Close the Neo4j connection"""
         if self.driver and not self.use_mock:
             await self.driver.close()
+
+# Global instance
+_neo4j_client = None
+
+async def get_neo4j_client() -> Neo4jClient:
+    """Get or create Neo4j client instance"""
+    global _neo4j_client
+    if _neo4j_client is None:
+        _neo4j_client = Neo4jClient()
+    return _neo4j_client
