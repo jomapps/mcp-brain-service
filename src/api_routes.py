@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api/v1")
 # Dependency to get knowledge service
 async def get_knowledge_service() -> KnowledgeService:
     """Get or create knowledge service instance"""
-    jina_service = get_embedding_service()
+    from src.lib.embeddings import JinaEmbeddingService
+    jina_service = JinaEmbeddingService()
     neo4j_client = await get_neo4j_client()
     return KnowledgeService(jina_service=jina_service, neo4j_client=neo4j_client)
 

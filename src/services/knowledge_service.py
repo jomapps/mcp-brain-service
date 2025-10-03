@@ -254,7 +254,7 @@ class KnowledgeService:
         """Store LangGraph workflow execution data"""
         try:
             workflow_id = str(uuid.uuid4())
-            
+
             # Embed the workflow step data
             step_content = f"{workflow_data.step_name}: {workflow_data.input_data} -> {workflow_data.output_data}"
             embedding = await self.jina.embed_single(step_content)

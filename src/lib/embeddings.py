@@ -12,30 +12,29 @@ logger = logging.getLogger(__name__)
 
 class JinaEmbeddingService:
     def __init__(self):
+        """Initialize Jina embedding service - REQUIRES valid API key"""
         self.api_key = os.getenv("JINA_API_KEY")
         self.api_url = os.getenv("JINA_API_URL", "https://api.jina.ai/v1/embeddings")
         self.model = os.getenv("JINA_MODEL", "jina-embeddings-v2-base-en")
         self.max_retries = 3
         self.timeout = 30
 
+        # Validate required API key
         if not self.api_key:
-            logger.warning("JINA_API_KEY not set, using mock embeddings")
-            self.use_mock = True
-        else:
-            self.use_mock = False
+            raise ValueError(
+                "JINA_API_KEY environment variable is required. "
+                "Jina AI is critical for embedding generation in Brain service. "
+                "Get your API key from https://jina.ai and set JINA_API_KEY environment variable."
+            )
+
+        logger.info(f"Jina embedding service initialized with model: {self.model}")
 
     async def embed_single(self, text: str) -> List[float]:
         """Embed a single text"""
-        if self.use_mock:
-            return self._mock_embedding(text)
-
         return (await self.embed_batch([text]))[0]
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Batch embedding with retry logic"""
-        if self.use_mock:
-            return [self._mock_embedding(text) for text in texts]
-
         for attempt in range(self.max_retries):
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
@@ -59,12 +58,20 @@ class JinaEmbeddingService:
                     async with session.post(self.api_url, json=payload, headers=headers) as response:
                         if response.status == 200:
                             data = await response.json()
-                            return [item["embedding"] for item in data["data"]]
+                            embeddings = [item["embedding"] for item in data["data"]]
+                            logger.debug(f"Generated {len(embeddings)} embeddings")
+                            return embeddings
                         elif response.status == 429:  # Rate limit
                             wait_time = 2 ** attempt
                             logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}")
                             await asyncio.sleep(wait_time)
                             continue
+                        elif response.status == 401:
+                            error_text = await response.text()
+                            raise Exception(
+                                f"Jina API authentication failed: {error_text}. "
+                                f"Please verify JINA_API_KEY is correct."
+                            )
                         else:
                             error_text = await response.text()
                             raise Exception(f"Jina API error {response.status}: {error_text}")
@@ -72,60 +79,45 @@ class JinaEmbeddingService:
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout on attempt {attempt + 1}, retrying...")
                 if attempt == self.max_retries - 1:
-                    raise Exception("Jina API timeout after all retries")
+                    raise Exception(
+                        f"Jina API timeout after {self.max_retries} retries. "
+                        f"Check network connectivity to {self.api_url}"
+                    )
                 await asyncio.sleep(2 ** attempt)
 
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     logger.error(f"Failed to get embeddings after {self.max_retries} attempts: {str(e)}")
-                    raise
+                    raise Exception(f"Jina embedding failed: {str(e)}") from e
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}, retrying...")
                 await asyncio.sleep(2 ** attempt)
 
-        raise Exception("Failed to get embeddings after all retries")
+        raise Exception(f"Failed to get embeddings after {self.max_retries} retries")
 
     async def embed_image(self, image_data: bytes) -> List[float]:
         """Image embedding support (future feature)"""
-        if self.use_mock:
-            return self._mock_embedding("image_data")
-
-        # TODO: Implement image embedding when Jina supports it
-        raise NotImplementedError("Image embedding not yet implemented")
-
-    def _mock_embedding(self, text: str) -> List[float]:
-        """Generate mock embedding for development"""
-        import hashlib
-        import struct
-
-        # Create deterministic mock embedding based on text hash
-        hash_obj = hashlib.md5(text.encode())
-        hash_bytes = hash_obj.digest()
-
-        # Convert to 768-dimensional vector (typical embedding size)
-        embedding = []
-        for i in range(0, len(hash_bytes), 2):
-            if i + 1 < len(hash_bytes):
-                val = struct.unpack('h', hash_bytes[i:i+2])[0] / 32768.0
-                embedding.append(val)
-
-        # Pad to 768 dimensions
-        while len(embedding) < 768:
-            embedding.append(0.0)
-
-        return embedding[:768]
+        raise NotImplementedError(
+            "Image embedding not yet implemented. "
+            "Jina AI image embeddings will be supported in future version."
+        )
 
     async def health_check(self) -> dict:
         """Check Jina API health"""
-        if self.use_mock:
-            return {"status": "mock", "timestamp": datetime.utcnow().isoformat()}
-
         try:
             # Test with a simple embedding
             await self.embed_single("health check")
-            return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+            return {
+                "status": "healthy",
+                "model": self.model,
+                "timestamp": datetime.utcnow().isoformat()
+            }
         except Exception as e:
-            return {"status": "unhealthy", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
-
+            return {
+                "status": "unhealthy",
+                "model": self.model,
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
 
 
 class EmbeddingService:

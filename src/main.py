@@ -54,32 +54,62 @@ character_service = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup."""
+    """Initialize services on startup - with strict validation."""
     global character_service
-    
+
     try:
-        # Initialize database connection (optional - fails gracefully if Neo4j not available)
-        neo4j_connection = None
+        logger.info("=" * 60)
+        logger.info("🚀 Starting MCP Brain Service")
+        logger.info("=" * 60)
+
+        # Validate and initialize Neo4j (REQUIRED)
+        logger.info("📊 Initializing Neo4j connection...")
+        from src.lib.neo4j_client import get_neo4j_client
+        neo4j_client = await get_neo4j_client()
+        logger.info("✅ Neo4j connection verified")
+
+        # Validate and initialize Jina embeddings (REQUIRED)
+        logger.info("🧠 Initializing Jina embedding service...")
+        from src.lib.embeddings import JinaEmbeddingService
+        jina_service = JinaEmbeddingService()
+        jina_health = await jina_service.health_check()
+        if jina_health["status"] != "healthy":
+            raise Exception(f"Jina service unhealthy: {jina_health.get('error', 'Unknown error')}")
+        logger.info(f"✅ Jina embeddings ready (model: {jina_service.model})")
+
+        # Initialize embedding service wrapper
+        embedding_service = get_embedding_service()
+
+        # Initialize database connection for character service (legacy support)
         try:
             neo4j_connection = await get_neo4j_connection()
-            logger.info("Connected to Neo4j database")
-        except Exception as e:
-            logger.warning(f"Neo4j not available, continuing without database: {e}")
-        
-        # Initialize embedding service
-        embedding_service = get_embedding_service()
-        logger.info("Embedding service initialized")
-        
+        except:
+            neo4j_connection = None
+
         # Initialize character service with integrations
         character_service = CharacterService(
             neo4j_connection=neo4j_connection,
             embedding_service=embedding_service
         )
-        
-        logger.info("MCP Brain Service started successfully")
-        
+
+        logger.info("=" * 60)
+        logger.info("✅ MCP Brain Service started successfully")
+        logger.info("   - Neo4j: Connected")
+        logger.info(f"   - Jina: {jina_service.model}")
+        logger.info(f"   - API: REST endpoints active at /api/v1")
+        logger.info("=" * 60)
+
     except Exception as e:
-        logger.error(f"Failed to start services: {e}")
+        logger.error("=" * 60)
+        logger.error("❌ FAILED TO START MCP BRAIN SERVICE")
+        logger.error(f"   Error: {str(e)}")
+        logger.error("=" * 60)
+        logger.error("\nRequired Environment Variables:")
+        logger.error("  - NEO4J_URI (e.g., bolt://localhost:7687)")
+        logger.error("  - NEO4J_USER")
+        logger.error("  - NEO4J_PASSWORD")
+        logger.error("  - JINA_API_KEY (from https://jina.ai)")
+        logger.error("=" * 60)
         raise
 
 
@@ -100,11 +130,42 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/health")
-async def health() -> Dict[str, str]:
-    """Health check endpoint."""
+async def health() -> Dict[str, Any]:
+    """Comprehensive health check endpoint."""
+    from src.lib.neo4j_client import get_neo4j_client
+    from src.lib.embeddings import JinaEmbeddingService
+
+    # Check Neo4j
+    neo4j_health = {"status": "unknown"}
+    try:
+        neo4j = await get_neo4j_client()
+        neo4j_health = await neo4j.health_check()
+    except Exception as e:
+        neo4j_health = {"status": "error", "error": str(e)}
+
+    # Check Jina
+    jina_health = {"status": "unknown"}
+    try:
+        jina = JinaEmbeddingService()
+        jina_health = await jina.health_check()
+    except Exception as e:
+        jina_health = {"status": "error", "error": str(e)}
+
+    # Overall status
+    overall_healthy = (
+        neo4j_health.get("status") == "healthy" and
+        jina_health.get("status") == "healthy"
+    )
+
     return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "status": "healthy" if overall_healthy else "degraded",
+        "service": "MCP Brain Service",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "components": {
+            "neo4j": neo4j_health,
+            "jina": jina_health
+        }
     }
 
 
