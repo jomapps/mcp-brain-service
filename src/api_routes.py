@@ -5,12 +5,21 @@ Provides HTTP endpoints for nodes, search, and graph operations
 
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, Header
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Depends, Header, Query
+from pydantic import BaseModel, Field, ValidationError
 
 from src.services.knowledge_service import KnowledgeService
-from src.lib.embeddings import get_embedding_service
+from src.services.gather_service import GatherService
+from src.lib.embeddings import get_embedding_service, JinaEmbeddingService
 from src.lib.neo4j_client import get_neo4j_client
+from src.lib.llm_client import get_llm_client
+from src.models.batch import (
+    BatchNodeCreateRequest, BatchNodeCreateResponse,
+    DuplicateSearchRequest, DuplicateSearchResponse,
+    DepartmentContextRequest, DepartmentContextResponse,
+    CoverageAnalysisRequest, CoverageAnalysisResponse,
+    BatchErrorResponse, BatchValidationError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +33,18 @@ async def get_knowledge_service() -> KnowledgeService:
     jina_service = JinaEmbeddingService()
     neo4j_client = await get_neo4j_client()
     return KnowledgeService(jina_service=jina_service, neo4j_client=neo4j_client)
+
+# Dependency to get gather service
+async def get_gather_service() -> GatherService:
+    """Get or create gather service instance"""
+    jina_service = JinaEmbeddingService()
+    neo4j_client = await get_neo4j_client()
+    llm_client = get_llm_client()
+    return GatherService(
+        jina_service=jina_service,
+        neo4j_client=neo4j_client,
+        llm_client=llm_client
+    )
 
 # Request/Response models
 class AddNodeRequest(BaseModel):
@@ -266,3 +287,206 @@ async def get_stats(
             "totalRelationships": 0,
             "nodesByType": {}
         }
+
+
+# ============================================================================
+# NEW BATCH ENDPOINTS FOR AUTOMATED GATHER CREATION
+# ============================================================================
+
+@router.post("/nodes/batch", response_model=BatchNodeCreateResponse)
+async def batch_create_nodes(
+    request: BatchNodeCreateRequest,
+    gather_service: GatherService = Depends(get_gather_service),
+    _: bool = Depends(verify_api_key)
+):
+    """
+    Create multiple nodes in a single batch request
+
+    - **Max batch size**: 50 nodes
+    - **Min batch size**: 1 node
+    - **Required fields**: type, content, projectId
+    - **Performance SLA**: <1000ms for 10 nodes, <4000ms for 50 nodes (95th percentile)
+    """
+    try:
+        # Validate batch size
+        if len(request.nodes) < 1 or len(request.nodes) > 50:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "batch_validation_failed",
+                    "message": "Batch size must be between 1 and 50 nodes",
+                    "details": {"batch_size": len(request.nodes)}
+                }
+            )
+
+        # Validate each node
+        invalid_nodes = []
+        for i, node in enumerate(request.nodes):
+            if not node.content or not node.content.strip():
+                invalid_nodes.append({
+                    "index": i,
+                    "reason": "Missing or empty content field"
+                })
+            if not node.type or not node.type.strip():
+                invalid_nodes.append({
+                    "index": i,
+                    "reason": "Missing or empty type field"
+                })
+
+        if invalid_nodes:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "batch_validation_failed",
+                    "message": "Invalid nodes in batch",
+                    "details": {"invalid_nodes": invalid_nodes}
+                }
+            )
+
+        # Create nodes
+        result = await gather_service.batch_create_nodes(request.nodes)
+
+        return BatchNodeCreateResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Batch node creation failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to create batch nodes: {str(e)}"
+            }
+        )
+
+
+@router.post("/search/duplicates", response_model=DuplicateSearchResponse)
+async def search_duplicates(
+    request: DuplicateSearchRequest,
+    gather_service: GatherService = Depends(get_gather_service),
+    _: bool = Depends(verify_api_key)
+):
+    """
+    Find semantically similar nodes to detect duplicates
+
+    - **Threshold**: 0.0-1.0 (default: 0.90)
+    - **Limit**: 1-50 results (default: 10)
+    - **Performance SLA**: <500ms (95th percentile)
+    """
+    try:
+        result = await gather_service.search_duplicates(
+            content=request.content,
+            project_id=request.projectId,
+            threshold=request.threshold,
+            limit=request.limit,
+            node_type=request.type,
+            department=request.department,
+            exclude_node_ids=request.excludeNodeIds
+        )
+
+        return DuplicateSearchResponse(**result)
+
+    except Exception as e:
+        logger.error(f"Duplicate search failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to search duplicates: {str(e)}"
+            }
+        )
+
+
+@router.get("/context/department", response_model=DepartmentContextResponse)
+async def get_department_context(
+    projectId: str = Query(..., description="Project ID"),
+    department: str = Query(..., description="Target department slug"),
+    previousDepartments: List[str] = Query(default=[], description="Previous department slugs"),
+    limit: int = Query(default=20, ge=1, le=100, description="Nodes per department"),
+    gather_service: GatherService = Depends(get_gather_service),
+    _: bool = Depends(verify_api_key)
+):
+    """
+    Aggregate context from previous departments
+
+    - **Limit**: 1-100 nodes per department (default: 20)
+    - **Performance SLA**: <800ms (95th percentile)
+    """
+    try:
+        # Validate projectId format
+        if not projectId or len(projectId) != 24:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_failed",
+                    "message": "projectId must be 24 characters"
+                }
+            )
+
+        result = await gather_service.get_department_context(
+            project_id=projectId,
+            target_department=department,
+            previous_departments=previousDepartments,
+            limit=limit
+        )
+
+        return DepartmentContextResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Department context retrieval failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to retrieve department context: {str(e)}"
+            }
+        )
+
+
+@router.post("/analyze/coverage", response_model=CoverageAnalysisResponse)
+async def analyze_coverage(
+    request: CoverageAnalysisRequest,
+    gather_service: GatherService = Depends(get_gather_service),
+    _: bool = Depends(verify_api_key)
+):
+    """
+    Analyze content coverage and identify gaps
+
+    - **Max items**: 100 gather items
+    - **Performance SLA**: <1500ms (95th percentile)
+    """
+    try:
+        # Validate gather items count
+        if len(request.gatherItems) > 100:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_failed",
+                    "message": "Maximum 100 gather items allowed",
+                    "details": {"item_count": len(request.gatherItems)}
+                }
+            )
+
+        result = await gather_service.analyze_coverage(
+            project_id=request.projectId,
+            department=request.department,
+            gather_items=request.gatherItems,
+            department_description=request.departmentDescription
+        )
+
+        return CoverageAnalysisResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Coverage analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to analyze coverage: {str(e)}"
+            }
+        )

@@ -1,23 +1,49 @@
 # MCP Brain Service
 
-A Python-based WebSocket service that provides character embedding and semantic search functionality for the Auto-Movie application. Built with FastAPI, Neo4j, and custom embedding generation.
+A Python-based service that provides embedding generation, semantic search, and AI-powered content analysis for the Auto-Movie application. Built with FastAPI, Neo4j, Jina AI, and OpenRouter LLM integration.
+
+## 🎉 Latest Release: v1.1.0 - Batch Endpoints
+
+**New in this release**: 4 powerful batch endpoints for automated gather creation workflows!
+
+- ✅ **Batch Node Creation** - Create up to 50 nodes in a single request
+- ✅ **Duplicate Detection** - Find semantically similar content
+- ✅ **Department Context** - Aggregate insights with AI theme extraction
+- ✅ **Coverage Analysis** - Identify gaps with LLM-powered recommendations
+
+[📚 View Full Changelog](CHANGELOG.md) | [📖 API Documentation](docs/BATCH_ENDPOINTS_GUIDE.md)
 
 ## Features
 
+### Core Capabilities
 - **Character Management**: Create and store characters with personality and appearance descriptions
-- **Embedding Generation**: Automatic text embedding generation for semantic search
-- **Semantic Search**: Find similar characters using natural language queries
+- **Embedding Generation**: Automatic text embedding using Jina AI (v4)
+- **Semantic Search**: Find similar content using natural language queries
+- **Batch Operations**: Efficient bulk node creation and processing
+- **Duplicate Detection**: Semantic similarity-based duplicate identification
+- **AI-Powered Analysis**: LLM-based theme extraction and coverage analysis
 - **WebSocket API**: Real-time MCP (Model Context Protocol) communication
-- **Project Isolation**: Characters are isolated by project ID
-- **Performance Optimized**: P95 response time < 1 minute for semantic search
+- **REST API**: Comprehensive HTTP endpoints for all operations
+- **Project Isolation**: Complete data isolation by project ID
+- **Performance Optimized**: Fast response times with parallel processing
 
 ## Architecture
 
-- **FastAPI**: Web framework with WebSocket support
-- **Neo4j**: Graph database for character storage (optional)
-- **Custom Embedding Service**: Deterministic embedding generation (Jina v4 ready)
+### Technology Stack
+- **FastAPI**: Web framework with WebSocket and REST API support
+- **Neo4j**: Graph database for knowledge graph storage
+- **Jina AI**: State-of-the-art embedding generation (v4)
+- **OpenRouter**: LLM integration (Claude Sonnet 4.5, Qwen backup)
+- **PayloadCMS**: Department configuration management
 - **Pydantic**: Data validation and serialization
-- **Pytest**: Comprehensive test suite with contract, integration, unit, and performance tests
+- **Pytest**: Comprehensive test suite (contract, integration, unit, performance)
+
+### Services
+- **Gather Service**: Batch operations, duplicate detection, context aggregation, coverage analysis
+- **Knowledge Service**: Document storage and retrieval
+- **Character Service**: Character management and search
+- **LLM Client**: AI-powered theme extraction and analysis
+- **PayloadCMS Client**: Department configuration fetching
 
 ## Quick Start
 
@@ -53,12 +79,96 @@ python -m uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
 
 ### Configuration
 
-Environment variables:
-- `NEO4J_URI`: Neo4j connection URI (default: `neo4j://localhost:7687`)
-- `NEO4J_USER`: Neo4j username (default: `neo4j`)
-- `NEO4J_PASSWORD`: Neo4j password (default: `password`)
+Create a `.env` file with required environment variables:
 
-## API Usage
+```bash
+# Neo4j Database
+NEO4J_URI=neo4j://127.0.0.1:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your-password
+
+# Jina AI Embeddings
+JINA_API_KEY=your-jina-api-key
+JINA_MODEL=jina-embeddings-v4
+
+# OpenRouter LLM
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_DEFAULT_MODEL=anthropic/claude-sonnet-4.5
+
+# PayloadCMS
+MAIN_APP_PAYLOAD_API_URL=https://your-app.com/api
+MAIN_APP_PAYLOAD_API_KEY=your-payload-key
+
+# Brain Service
+BRAIN_SERVICE_API_KEY=your-brain-api-key
+```
+
+See [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) for complete configuration details.
+
+## API Endpoints
+
+### 🆕 Batch Endpoints (v1.1.0)
+
+#### 1. Batch Node Creation
+```bash
+POST /api/v1/nodes/batch
+Authorization: Bearer {API_KEY}
+
+# Create multiple nodes in one request (1-50 nodes)
+{
+  "nodes": [
+    {
+      "type": "GatherItem",
+      "content": "Full text content",
+      "projectId": "507f1f77bcf86cd799439011",
+      "properties": {"department": "story"}
+    }
+  ]
+}
+```
+
+#### 2. Duplicate Search
+```bash
+POST /api/v1/search/duplicates
+Authorization: Bearer {API_KEY}
+
+# Find semantically similar content
+{
+  "content": "Text to check for duplicates",
+  "projectId": "507f1f77bcf86cd799439011",
+  "threshold": 0.90,
+  "limit": 10
+}
+```
+
+#### 3. Department Context
+```bash
+GET /api/v1/context/department?projectId={id}&department=character&previousDepartments=story
+Authorization: Bearer {API_KEY}
+
+# Aggregate context from previous departments with AI theme extraction
+```
+
+#### 4. Coverage Analysis
+```bash
+POST /api/v1/analyze/coverage
+Authorization: Bearer {API_KEY}
+
+# Analyze content coverage and identify gaps
+{
+  "projectId": "507f1f77bcf86cd799439011",
+  "department": "story",
+  "gatherItems": [
+    {"content": "Plot overview...", "summary": "Main plot"}
+  ]
+}
+```
+
+**📖 Full API Documentation**: [Batch Endpoints Guide](docs/BATCH_ENDPOINTS_GUIDE.md)
+
+### Legacy Endpoints
+
+## WebSocket API Usage
 
 ### Create Character
 
