@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2025-01-04
+
+### 🎉 Added - Data Quality & Deletion Features
+
+#### Content Validation
+- **Automatic validation** on `POST /api/v1/nodes` endpoint
+  - Rejects empty or whitespace-only content
+  - Blocks error messages ("Error:", "no user message", etc.)
+  - Prevents invalid data ("undefined", "null", "NaN", "[object Object]")
+  - Enforces minimum content length (10 characters)
+  - Returns detailed validation error messages with pattern matching info
+  - Structured error responses following API standards
+
+#### Node Deletion
+- **DELETE /api/v1/nodes/{node_id}** - New endpoint for node deletion
+  - Requires both node ID and project ID for security
+  - Uses `DETACH DELETE` to remove node and all relationships
+  - Returns 404 if node not found
+  - Comprehensive error handling and logging
+  - API key authentication required
+  - Project isolation enforced
+
+#### Bulk Cleanup Tools
+- **cleanup_invalid_nodes.py** - Utility script for bulk deletion
+  - Dry run mode for safe preview before deletion
+  - Project filtering (clean specific or all projects)
+  - Custom pattern matching
+  - Default patterns for common invalid data
+  - Detailed statistics and logging
+  - 5-second safety countdown before live deletion
+  - List projects command to see data distribution
+  - Verbose mode for detailed debugging
+
+#### Documentation
+- **docs/DELETION_AND_VALIDATION.md** - Comprehensive guide
+  - Problem statement and solution overview
+  - API usage examples with curl commands
+  - Workflow recommendations
+  - Security considerations
+  - Performance impact analysis
+  - Monitoring and logging guidance
+
+- **scripts/README.md** - Cleanup script documentation
+  - Usage examples for all scenarios
+  - Safety features explanation
+  - Troubleshooting guide
+  - Best practices and automation tips
+
+#### Testing
+- **test_deletion_features.sh** - Comprehensive test suite
+  - 9 test cases covering all features
+  - Validation testing (empty, error, short, valid content)
+  - DELETE endpoint testing (success and 404 cases)
+  - Cleanup script testing (dry-run, list projects)
+  - Full workflow integration test
+  - Colored output for easy reading
+
+### 🔧 Changed
+- Enhanced `POST /api/v1/nodes` with validation logic
+- Improved error responses with structured format
+- Updated README.md with new features section
+
+### 📚 Documentation
+- Added deletion and validation guide
+- Updated README with quick examples
+- Created cleanup script documentation
+- Added comprehensive test suite
+
+---
+
 ## [1.1.0] - 2025-01-04
 
 ### 🎉 Added - Batch Endpoints for Automated Gather Creation

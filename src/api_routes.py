@@ -56,6 +56,12 @@ class AddNodeRequest(BaseModel):
 class AddNodeResponse(BaseModel):
     node: Dict[str, Any]
 
+class DeleteNodeResponse(BaseModel):
+    status: str
+    message: str
+    deleted_count: int
+    node_id: str
+
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query text")
     project_id: str = Field(..., description="Project ID for isolation")
@@ -118,9 +124,56 @@ async def add_node(
 ):
     """Add a new node to the knowledge graph"""
     try:
+        # VALIDATION: Filter out irrelevant/invalid content
+        content = request.content.strip() if request.content else ""
+
+        # Check for empty content
+        if not content:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_failed",
+                    "message": "Content cannot be empty",
+                    "details": {"field": "content"}
+                }
+            )
+
+        # Check for error messages
+        error_patterns = ["error:", "no user message", "undefined", "null"]
+        content_lower = content.lower()
+        for pattern in error_patterns:
+            if pattern in content_lower:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "validation_failed",
+                        "message": f"Invalid content: Cannot store error messages or invalid data",
+                        "details": {
+                            "field": "content",
+                            "pattern_matched": pattern,
+                            "reason": "Error messages and invalid data are not allowed"
+                        }
+                    }
+                )
+
+        # Minimum content length validation
+        if len(content) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_failed",
+                    "message": "Content too short: minimum 10 characters required",
+                    "details": {
+                        "field": "content",
+                        "current_length": len(content),
+                        "minimum_length": 10
+                    }
+                }
+            )
+
         # Store document with embedding
         document_id = await knowledge_service.store_document(
-            content=request.content,
+            content=content,
             metadata={
                 **request.properties,
                 "type": request.type,
@@ -133,14 +186,92 @@ async def add_node(
             "node": {
                 "id": document_id,
                 "type": request.type,
-                "content": request.content,
+                "content": content,
                 "projectId": request.projectId,
                 "properties": request.properties
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to add node: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/nodes/{node_id}", response_model=DeleteNodeResponse)
+async def delete_node(
+    node_id: str,
+    project_id: str = Query(..., description="Project ID for isolation"),
+    knowledge_service: KnowledgeService = Depends(get_knowledge_service),
+    _: bool = Depends(verify_api_key)
+):
+    """
+    Delete a node from the knowledge graph
+
+    This endpoint allows you to remove irrelevant or erroneous nodes from the knowledge graph.
+    Requires both the node ID and project ID for security and isolation.
+
+    Args:
+        node_id: The unique identifier of the node to delete
+        project_id: Project ID to ensure proper isolation
+
+    Returns:
+        DeleteNodeResponse with deletion status and count
+
+    Raises:
+        404: Node not found
+        500: Internal server error
+    """
+    try:
+        logger.info(f"Attempting to delete node {node_id} from project {project_id}")
+
+        # Delete from Neo4j with DETACH DELETE to remove relationships too
+        query = """
+        MATCH (n {id: $node_id, project_id: $project_id})
+        DETACH DELETE n
+        RETURN count(n) as deleted_count
+        """
+
+        result = await knowledge_service.neo4j.run_query(query, {
+            "node_id": node_id,
+            "project_id": project_id
+        })
+
+        deleted_count = result[0]["deleted_count"] if result else 0
+
+        if deleted_count == 0:
+            logger.warning(f"Node {node_id} not found in project {project_id}")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "node_not_found",
+                    "message": f"Node with ID '{node_id}' not found in project '{project_id}'",
+                    "details": {
+                        "node_id": node_id,
+                        "project_id": project_id
+                    }
+                }
+            )
+
+        logger.info(f"Successfully deleted node {node_id} from project {project_id}")
+        return {
+            "status": "success",
+            "message": f"Node deleted successfully",
+            "deleted_count": deleted_count,
+            "node_id": node_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete node {node_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "deletion_failed",
+                "message": f"Failed to delete node: {str(e)}",
+                "details": {"node_id": node_id}
+            }
+        )
 
 @router.post("/search", response_model=SearchResponse)
 async def search_nodes(

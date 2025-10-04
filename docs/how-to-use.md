@@ -15,6 +15,9 @@ The MCP Brain Service is a **Knowledge Graph API** that provides semantic search
 - ✅ **Jina Embeddings v4** - State-of-the-art semantic embeddings
 - ✅ **Neo4j GDS 2.13.2** - Graph Data Science with cosine similarity
 - ✅ **Semantic Search** - Find similar content using vector embeddings
+- ✅ **Content Validation** - Automatic rejection of invalid/error data (v1.2.0)
+- ✅ **Node Deletion** - API endpoint and bulk cleanup tools (v1.2.0)
+- ✅ **Batch Operations** - Efficient bulk node creation and processing (v1.1.0)
 - ✅ **Project Isolation** - Keep your data separate by project
 - ✅ **Systemd Service** - Auto-start on boot, auto-restart on failure
 
@@ -297,6 +300,191 @@ curl -H "Authorization: Bearer ae6e18cb408bc7128f23585casdlaelwlekoqdsldsa" \
   }
 }
 ```
+
+---
+
+## 🆕 Data Quality & Deletion Features (v1.2.0)
+
+### Content Validation (Automatic)
+
+All node creation requests (`POST /api/v1/nodes` and `POST /api/v1/nodes/batch`) are automatically validated to prevent invalid data from being stored.
+
+**Validation Rules**:
+- ✅ Content cannot be empty or whitespace-only
+- ✅ Content must be at least 10 characters long
+- ✅ Content cannot contain error patterns:
+  - "error:" (case-insensitive)
+  - "no user message"
+  - "undefined"
+  - "null"
+
+**Example - Invalid Request**:
+```bash
+curl -X POST https://brain.ft.tc/api/v1/nodes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "gather",
+    "content": "Error: No user message found",
+    "projectId": "my-project"
+  }'
+```
+
+**Response (400 Bad Request)**:
+```json
+{
+  "error": "validation_failed",
+  "message": "Invalid content: Cannot store error messages or invalid data",
+  "details": {
+    "field": "content",
+    "pattern_matched": "error:",
+    "reason": "Error messages and invalid data are not allowed"
+  }
+}
+```
+
+**Example - Valid Request**:
+```bash
+curl -X POST https://brain.ft.tc/api/v1/nodes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "gather",
+    "content": "User wants to book a flight to Paris for next week",
+    "projectId": "my-project"
+  }'
+```
+
+**Response (200 OK)**:
+```json
+{
+  "node": {
+    "id": "abc-123-def-456",
+    "type": "gather",
+    "content": "User wants to book a flight to Paris for next week",
+    "projectId": "my-project",
+    "properties": {}
+  }
+}
+```
+
+### 7. Delete Node
+
+**Endpoint**: `DELETE /api/v1/nodes/{node_id}`
+
+**Description**: Delete a specific node and all its relationships from the knowledge graph.
+
+**Authentication**: Required
+
+**Query Parameters**:
+- `project_id` (required): Project ID for isolation and security
+
+**Example Request**:
+```bash
+curl -X DELETE "https://brain.ft.tc/api/v1/nodes/abc-123-def-456?project_id=my-project" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "status": "success",
+  "message": "Node deleted successfully",
+  "deleted_count": 1,
+  "node_id": "abc-123-def-456"
+}
+```
+
+**Error Response (404 Not Found)**:
+```json
+{
+  "error": "node_not_found",
+  "message": "Node with ID 'abc-123-def-456' not found in project 'my-project'",
+  "details": {
+    "node_id": "abc-123-def-456",
+    "project_id": "my-project"
+  }
+}
+```
+
+**Notes**:
+- Uses `DETACH DELETE` to remove the node and all its relationships
+- Requires both node ID and project ID for security
+- Returns 404 if node doesn't exist or belongs to different project
+- All deletions are logged for audit purposes
+
+### Bulk Cleanup Script
+
+For bulk deletion of invalid nodes, use the cleanup script:
+
+```bash
+# Preview what would be deleted (always start here)
+python scripts/cleanup_invalid_nodes.py --dry-run
+
+# List all projects and their node counts
+python scripts/cleanup_invalid_nodes.py --list-projects
+
+# Clean specific project
+python scripts/cleanup_invalid_nodes.py --project-id my-project-123
+
+# Clean all projects
+python scripts/cleanup_invalid_nodes.py
+
+# Custom patterns
+python scripts/cleanup_invalid_nodes.py --patterns "Error:" "test data" "invalid"
+
+# Verbose output
+python scripts/cleanup_invalid_nodes.py --verbose --dry-run
+```
+
+**Default Invalid Patterns**:
+- `Error:`, `error:`
+- `no user message`, `No user message`
+- `undefined`, `null`, `NULL`
+- `[object Object]`, `NaN`
+
+**Example Output**:
+```
+============================================================
+CLEANUP INVALID NODES
+============================================================
+Mode: DRY RUN (preview only)
+Project filter: All projects
+Patterns: Error:, error:, no user message, undefined, null
+============================================================
+
+Processing pattern: 'Error:'
+  Would delete 5 nodes
+  Sample IDs: ['abc-123', 'def-456', 'ghi-789']
+
+Processing pattern: 'no user message'
+  Would delete 3 nodes
+  Sample IDs: ['jkl-012', 'mno-345']
+
+============================================================
+CLEANUP SUMMARY
+============================================================
+Total nodes found: 8
+Would delete: 8 nodes
+
+By pattern:
+  'Error:': 5
+  'no user message': 3
+
+Duration: 1.23 seconds
+============================================================
+
+✅ Dry run completed. Run without --dry-run to actually delete nodes.
+```
+
+**Safety Features**:
+- ✅ Dry-run mode (preview before deleting)
+- ✅ 5-second countdown before live deletion
+- ✅ Project filtering
+- ✅ Detailed statistics and logging
+- ✅ Error handling (continues on failure)
+
+**Full Documentation**: See [Deletion & Validation Guide](./DELETION_AND_VALIDATION.md)
 
 ---
 

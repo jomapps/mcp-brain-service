@@ -22,6 +22,8 @@ A Python-based service that provides embedding generation, semantic search, and 
 - **Batch Operations**: Efficient bulk node creation and processing
 - **Duplicate Detection**: Semantic similarity-based duplicate identification
 - **AI-Powered Analysis**: LLM-based theme extraction and coverage analysis
+- **Content Validation**: Automatic rejection of invalid/error data (NEW!)
+- **Node Deletion**: API endpoint and bulk cleanup tools (NEW!)
 - **WebSocket API**: Real-time MCP (Model Context Protocol) communication
 - **REST API**: Comprehensive HTTP endpoints for all operations
 - **Project Isolation**: Complete data isolation by project ID
@@ -165,6 +167,47 @@ Authorization: Bearer {API_KEY}
 ```
 
 **📖 Full API Documentation**: [Batch Endpoints Guide](docs/BATCH_ENDPOINTS_GUIDE.md)
+
+### 🆕 Data Quality & Deletion Features
+
+#### Content Validation (Automatic)
+All node creation requests are automatically validated:
+- ✅ Rejects empty content
+- ✅ Rejects error messages ("Error:", "no user message", etc.)
+- ✅ Rejects invalid data ("undefined", "null", "NaN")
+- ✅ Enforces minimum content length (10 characters)
+
+```bash
+# This will be rejected with 400 error
+POST /api/v1/nodes
+{
+  "content": "Error: No user message found",  # ❌ Invalid
+  "projectId": "my-project",
+  "type": "gather"
+}
+```
+
+#### Delete Node
+```bash
+DELETE /api/v1/nodes/{node_id}?project_id={project_id}
+Authorization: Bearer {API_KEY}
+
+# Deletes a specific node and all its relationships
+```
+
+#### Bulk Cleanup Script
+```bash
+# Preview what would be deleted (always start here)
+python scripts/cleanup_invalid_nodes.py --dry-run
+
+# Clean specific project
+python scripts/cleanup_invalid_nodes.py --project-id my-project
+
+# List all projects
+python scripts/cleanup_invalid_nodes.py --list-projects
+```
+
+**📖 Full Documentation**: [Deletion & Validation Guide](docs/DELETION_AND_VALIDATION.md)
 
 ### Legacy Endpoints
 
