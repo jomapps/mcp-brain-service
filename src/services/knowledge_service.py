@@ -68,7 +68,7 @@ class KnowledgeService:
                     embedding=embedding,
                     document_id=record["document_id"],
                     similarity_score=record["similarity"],
-                    metadata=record["metadata"]
+                    metadata=json.loads(record["metadata"]) if isinstance(record["metadata"], str) else record["metadata"]
                 )
                 for record in results
             ]
@@ -305,7 +305,7 @@ class KnowledgeService:
                     embedding=query_embedding,
                     document_id=record["document_id"],
                     similarity_score=record["similarity"],
-                    metadata=record["metadata"]
+                    metadata=json.loads(record["metadata"]) if isinstance(record["metadata"], str) else record["metadata"]
                 )
                 for record in results
             ]

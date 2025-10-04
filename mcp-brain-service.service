@@ -1,0 +1,24 @@
+[Unit]
+Description=MCP Brain Service - Knowledge Graph API
+After=network.target neo4j.service
+Wants=neo4j.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/mcp-brain-service
+EnvironmentFile=/var/www/mcp-brain-service/.env
+ExecStart=/var/www/mcp-brain-service/venv/bin/python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8002
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mcp-brain-service
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
