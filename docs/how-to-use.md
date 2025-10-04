@@ -317,6 +317,7 @@ All node creation requests (`POST /api/v1/nodes` and `POST /api/v1/nodes/batch`)
   - "no user message"
   - "undefined"
   - "null"
+  - "[object Object]"
 
 **Example - Invalid Request**:
 ```bash

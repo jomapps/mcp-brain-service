@@ -138,8 +138,8 @@ async def add_node(
                 }
             )
 
-        # Check for error messages
-        error_patterns = ["error:", "no user message", "undefined", "null"]
+        # Check for error messages and invalid data patterns
+        error_patterns = ["error:", "no user message", "undefined", "null", "[object object]"]
         content_lower = content.lower()
         for pattern in error_patterns:
             if pattern in content_lower:

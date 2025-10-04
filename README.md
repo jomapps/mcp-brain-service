@@ -174,7 +174,7 @@ Authorization: Bearer {API_KEY}
 All node creation requests are automatically validated:
 - ✅ Rejects empty content
 - ✅ Rejects error messages ("Error:", "no user message", etc.)
-- ✅ Rejects invalid data ("undefined", "null", "NaN")
+- ✅ Rejects invalid data ("undefined", "null", "[object Object]", "NaN")
 - ✅ Enforces minimum content length (10 characters)
 
 ```bash

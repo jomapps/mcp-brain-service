@@ -36,6 +36,7 @@ This polluted the knowledge graph and degraded search quality.
   - "no user message"
   - "undefined"
   - "null"
+  - "[object Object]"
 
 **Example Request** (Invalid):
 ```bash
