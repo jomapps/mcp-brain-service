@@ -337,10 +337,15 @@ async def handle_find_similar_characters(message: Dict[str, Any]) -> Dict[str, A
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # Only enable reload in development
+    is_dev = os.getenv("ENVIRONMENT", "production") == "development"
+
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",
         port=8002,
         log_level="info",
-        reload=True
+        reload=is_dev
     )

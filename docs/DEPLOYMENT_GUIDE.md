@@ -486,20 +486,146 @@ uvicorn src.main:app --host 0.0.0.0 --port 8002 --workers 4
 
 ---
 
+## 🔧 Troubleshooting
+
+### Issue: DELETE Endpoint Returns 405 Method Not Allowed
+
+**Symptoms**:
+- DELETE requests return `405 Method Not Allowed`
+- Response header shows `allow: GET` only
+- Service appears to be running but using old code
+
+**Root Cause**:
+- Stale process running old code
+- PM2 not loading environment variables
+- Auto-reload mechanism broken
+
+**Solution**:
+1. Check for duplicate processes:
+   ```bash
+   ps aux | grep "python.*src.main"
+   ```
+
+2. Kill stale processes:
+   ```bash
+   pkill -f "python.*src.main"
+   ```
+
+3. Verify PM2 configuration uses `start.sh`:
+   ```bash
+   cat ecosystem.config.js
+   # Should have: script: 'start.sh', interpreter: 'bash'
+   ```
+
+4. Restart service properly:
+   ```bash
+   pm2 delete mcp-brain-service
+   pm2 start ecosystem.config.js
+   pm2 save
+   ```
+
+5. Verify DELETE endpoint works:
+   ```bash
+   curl -X DELETE "http://localhost:8002/api/v1/nodes/test?project_id=test" \
+     -H "Authorization: Bearer YOUR_API_KEY"
+   ```
+
+**Reference**: See `DELETE_ENDPOINT_FIX.md` for detailed analysis.
+
+### Issue: Service Fails to Start (Missing Environment Variables)
+
+**Symptoms**:
+- Service crashes on startup
+- Error: "NEO4J_URI environment variable is required"
+- PM2 shows constant restarts
+
+**Solution**:
+1. Verify `.env` file exists:
+   ```bash
+   ls -la /var/www/mcp-brain-service/.env
+   ```
+
+2. Check PM2 uses `start.sh` (which loads `.env`):
+   ```bash
+   cat ecosystem.config.js
+   ```
+
+3. Manually test environment loading:
+   ```bash
+   cd /var/www/mcp-brain-service
+   source .env
+   echo $NEO4J_URI
+   ```
+
+### Issue: Port Already in Use
+
+**Symptoms**:
+- Error: `[Errno 98] Address already in use`
+- Service won't start
+
+**Solution**:
+```bash
+# Find process using port 8002
+sudo lsof -i :8002
+
+# Kill the process
+sudo kill -9 <PID>
+
+# Restart service
+pm2 restart mcp-brain-service
+```
+
+### Issue: Auto-Reload Causing Instability
+
+**Symptoms**:
+- Service keeps restarting
+- Multiple Python processes running
+- Port conflicts
+
+**Solution**:
+The service now disables auto-reload in production. Verify:
+```bash
+grep "ENVIRONMENT" .env
+# Should show: ENVIRONMENT=production
+```
+
+Auto-reload only activates when `ENVIRONMENT=development`.
+
+---
+
 ## 📞 Support
 
 ### Documentation
 - API Docs: https://brain.ft.tc/docs
 - Developer Guide: `/docs/BATCH_ENDPOINTS_GUIDE.md`
 - Implementation Summary: `/docs/IMPLEMENTATION_SUMMARY.md`
+- DELETE Endpoint Fix: `/DELETE_ENDPOINT_FIX.md`
 
 ### Logs Location
 - PM2: `~/.pm2/logs/`
 - Systemd: `journalctl -u mcp-brain-service`
 - Application: Check `LOG_LEVEL` in `.env`
 
+### Common Commands
+```bash
+# Check service status
+pm2 status
+pm2 logs mcp-brain-service --lines 50
+
+# Restart service
+pm2 restart mcp-brain-service
+
+# Check for duplicate processes
+ps aux | grep "python.*src.main"
+
+# Test endpoints
+curl http://localhost:8002/health
+curl -X DELETE "http://localhost:8002/api/v1/nodes/test?project_id=test" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
 ---
 
-**Deployment Status**: ✅ Ready for Production  
-**Last Updated**: January 2025
+**Deployment Status**: ✅ Ready for Production
+**Last Updated**: October 2025
 

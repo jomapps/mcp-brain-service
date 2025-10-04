@@ -2,16 +2,21 @@
 
 A Python-based service that provides embedding generation, semantic search, and AI-powered content analysis for the Auto-Movie application. Built with FastAPI, Neo4j, Jina AI, and OpenRouter LLM integration.
 
-## 🎉 Latest Release: v1.1.0 - Batch Endpoints
+## 🎉 Latest Updates
 
-**New in this release**: 4 powerful batch endpoints for automated gather creation workflows!
+### v1.2.1 - Production Stability Fix (October 2025)
+- ✅ **Fixed DELETE Endpoint** - Resolved 405 Method Not Allowed error
+- ✅ **Improved PM2 Configuration** - Proper environment variable loading
+- ✅ **Production Stability** - Disabled auto-reload in production
+- ✅ **Enhanced Documentation** - Added troubleshooting guide
 
+### v1.1.0 - Batch Endpoints
 - ✅ **Batch Node Creation** - Create up to 50 nodes in a single request
 - ✅ **Duplicate Detection** - Find semantically similar content
 - ✅ **Department Context** - Aggregate insights with AI theme extraction
 - ✅ **Coverage Analysis** - Identify gaps with LLM-powered recommendations
 
-[📚 View Full Changelog](CHANGELOG.md) | [📖 API Documentation](docs/BATCH_ENDPOINTS_GUIDE.md)
+[📚 View Full Changelog](CHANGELOG.md) | [📖 API Documentation](docs/BATCH_ENDPOINTS_GUIDE.md) | [🔧 Troubleshooting](DELETE_ENDPOINT_FIX.md)
 
 ## Features
 

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2025-10-04
+
+### 🔧 Fixed - Production Stability & DELETE Endpoint
+
+#### DELETE Endpoint 405 Error Resolution
+- **Fixed DELETE endpoint returning 405 Method Not Allowed**
+  - Root cause: Stale uvicorn process running old code without DELETE endpoint
+  - Service was running outdated code due to broken auto-reload mechanism
+  - Port conflict prevented new service from starting properly
+
+#### PM2 Configuration Improvements
+- **Updated ecosystem.config.js to use start.sh script**
+  - Changed from direct Python execution to bash script
+  - Ensures `.env` file is properly loaded before service starts
+  - Prevents "missing environment variables" startup failures
+  - Script: `start.sh` with interpreter: `bash`
+
+#### Production Stability Enhancements
+- **Disabled auto-reload in production environment**
+  - Modified `src/main.py` to check `ENVIRONMENT` variable
+  - Auto-reload only enabled when `ENVIRONMENT=development`
+  - Prevents port conflicts and duplicate processes
+  - Improves service stability and reliability
+
+#### Documentation Updates
+- **Added DELETE_ENDPOINT_FIX.md** - Comprehensive troubleshooting guide
+  - Detailed root cause analysis
+  - Step-by-step fix procedure
+  - Prevention measures and best practices
+  - Verification tests and examples
+- **Updated docs/DEPLOYMENT_GUIDE.md** - Added troubleshooting section
+  - Common issues and solutions
+  - DELETE endpoint 405 error resolution
+  - Environment variable loading issues
+  - Port conflict resolution
+  - Auto-reload stability problems
+- **Updated README.md** - Added latest updates section
+
+#### Verification
+- ✅ DELETE endpoint works locally (404 for non-existent nodes)
+- ✅ DELETE endpoint works in production (https://brain.ft.tc)
+- ✅ Service health check passes
+- ✅ All environment variables properly loaded
+- ✅ No duplicate processes running
+- ✅ PM2 configuration saved and persistent
+
+---
+
 ## [1.2.0] - 2025-01-04
 
 ### 🎉 Added - Data Quality & Deletion Features
