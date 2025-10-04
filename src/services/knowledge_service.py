@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
+import json
 
 from ..models.knowledge import (
     Document, EmbeddingResult, SearchResults, GraphNode, 
@@ -87,21 +88,21 @@ class KnowledgeService:
         try:
             document_id = str(uuid.uuid4())
             embedding = await self.jina.embed_single(content)
-            
+
             # Create document node
             await self.neo4j.create_node(
                 labels=["Document"],
                 properties={
                     "id": document_id,
                     "content": content,
-                    "metadata": metadata,
+                    "metadata": json.dumps(metadata),  # Serialize metadata to JSON string
                     "project_id": project_id,
                     "document_type": metadata.get("document_type", "unknown"),
                     "embedding": embedding,
                     "created_at": datetime.utcnow().isoformat()
                 }
             )
-            
+
             return document_id
         except Exception as e:
             raise Exception(f"Failed to store document: {str(e)}")
@@ -227,25 +228,25 @@ class KnowledgeService:
             texts = [doc.content for doc in documents]
             embeddings = await self.jina.embed_batch(texts)
             document_ids = []
-            
+
             for doc, embedding in zip(documents, embeddings):
                 document_id = str(uuid.uuid4())
-                
+
                 await self.neo4j.create_node(
                     labels=["Document"],
                     properties={
                         "id": document_id,
                         "content": doc.content,
-                        "metadata": doc.metadata,
+                        "metadata": json.dumps(doc.metadata) if doc.metadata else "{}",
                         "project_id": project_id,
                         "document_type": doc.document_type,
                         "embedding": embedding,
                         "created_at": datetime.utcnow().isoformat()
                     }
                 )
-                
+
                 document_ids.append(document_id)
-            
+
             return document_ids
         except Exception as e:
             raise Exception(f"Failed to bulk store documents: {str(e)}")
