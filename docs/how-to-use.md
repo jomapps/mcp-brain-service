@@ -300,6 +300,309 @@ curl -H "Authorization: Bearer ae6e18cb408bc7128f23585casdlaelwlekoqdsldsa" \
 
 ---
 
+## 🆕 Batch Endpoints (v1.1.0)
+
+### 7. Batch Node Creation
+
+**Endpoint**: `POST /api/v1/nodes/batch`
+
+**Description**: Create multiple nodes in a single request for efficient bulk operations.
+
+**Authentication**: Required
+
+**Request Body**:
+```json
+{
+  "nodes": [
+    {
+      "type": "GatherItem",
+      "content": "Full text content for embedding generation",
+      "projectId": "507f1f77bcf86cd799439011",
+      "properties": {
+        "department": "story",
+        "departmentName": "Story Department",
+        "isAutomated": true,
+        "iteration": 5,
+        "qualityScore": 75.5
+      }
+    },
+    {
+      "type": "GatherItem",
+      "content": "Another gather item content",
+      "projectId": "507f1f77bcf86cd799439011",
+      "properties": {
+        "department": "character",
+        "isAutomated": true
+      }
+    }
+  ]
+}
+```
+
+**Constraints**:
+- Min nodes: 1
+- Max nodes: 50
+- Required fields: `type`, `content`, `projectId`
+- projectId format: 24-character hex string (MongoDB ObjectId)
+
+**Response**:
+```json
+{
+  "success": true,
+  "created": 2,
+  "nodeIds": ["uuid-1", "uuid-2"],
+  "nodes": [
+    {
+      "id": "uuid-1",
+      "type": "GatherItem",
+      "properties": {...},
+      "embedding": {
+        "dimensions": 1536,
+        "model": "jina-embeddings-v4"
+      }
+    }
+  ],
+  "timing": {
+    "embedding_time_ms": 626.8,
+    "neo4j_write_time_ms": 60.3,
+    "total_time_ms": 687.2
+  }
+}
+```
+
+**Example**:
+```bash
+curl -X POST https://brain.ft.tc/api/v1/nodes/batch \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nodes": [
+      {
+        "type": "GatherItem",
+        "content": "Story premise: A hero embarks on a journey...",
+        "projectId": "507f1f77bcf86cd799439011",
+        "properties": {
+          "department": "story",
+          "isAutomated": true
+        }
+      }
+    ]
+  }'
+```
+
+### 8. Duplicate Search
+
+**Endpoint**: `POST /api/v1/search/duplicates`
+
+**Description**: Find semantically similar nodes to detect potential duplicates.
+
+**Authentication**: Required
+
+**Request Body**:
+```json
+{
+  "content": "Text content to check for duplicates",
+  "projectId": "507f1f77bcf86cd799439011",
+  "threshold": 0.90,
+  "limit": 10,
+  "type": "GatherItem",
+  "department": "story",
+  "excludeNodeIds": ["node-id-to-exclude"]
+}
+```
+
+**Parameters**:
+- `content` (required): Text to find duplicates for
+- `projectId` (required): Project ID (24 hex chars)
+- `threshold` (optional, default: 0.90): Similarity threshold (0.0-1.0)
+- `limit` (optional, default: 10): Max results (1-50)
+- `type` (optional, default: "GatherItem"): Filter by node type
+- `department` (optional): Filter by department
+- `excludeNodeIds` (optional): Node IDs to exclude
+
+**Response**:
+```json
+{
+  "duplicates": [
+    {
+      "nodeId": "neo4j-id-456",
+      "similarity": 0.95,
+      "content": "Very similar content text",
+      "properties": {
+        "department": "story",
+        "summary": "Brief summary",
+        "createdAt": "2025-01-15T10:30:00Z"
+      }
+    }
+  ],
+  "query_embedding_time_ms": 200,
+  "search_time_ms": 150,
+  "total_time_ms": 350
+}
+```
+
+**Example**:
+```bash
+curl -X POST https://brain.ft.tc/api/v1/search/duplicates \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Story about a hero journey",
+    "projectId": "507f1f77bcf86cd799439011",
+    "threshold": 0.85,
+    "limit": 5,
+    "department": "story"
+  }'
+```
+
+### 9. Department Context Retrieval
+
+**Endpoint**: `GET /api/v1/context/department`
+
+**Description**: Aggregate context from previous departments with AI-powered theme extraction.
+
+**Authentication**: Required
+
+**Query Parameters**:
+- `projectId` (required): Project ID (24 hex chars)
+- `department` (required): Target department slug
+- `previousDepartments` (optional): Previous department slugs (array)
+- `limit` (optional, default: 20): Nodes per department (1-100)
+
+**Response**:
+```json
+{
+  "projectId": "507f1f77bcf86cd799439011",
+  "targetDepartment": "character",
+  "context": {
+    "story": {
+      "nodeCount": 15,
+      "qualityScore": 85,
+      "topNodes": [
+        {
+          "nodeId": "neo4j-id-1",
+          "content": "Story premise...",
+          "summary": "Main story arc",
+          "relevance": 0.95
+        }
+      ],
+      "keyThemes": ["redemption", "family", "sacrifice"]
+    }
+  },
+  "aggregatedSummary": "The story follows a redemption arc...",
+  "relevantNodes": [...],
+  "totalNodesAggregated": 27,
+  "timing": {
+    "query_time_ms": 180,
+    "aggregation_time_ms": 220,
+    "total_time_ms": 400
+  }
+}
+```
+
+**Example**:
+```bash
+curl -X GET "https://brain.ft.tc/api/v1/context/department?projectId=507f1f77bcf86cd799439011&department=character&previousDepartments=story&previousDepartments=visual&limit=20" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### 10. Coverage Analysis
+
+**Endpoint**: `POST /api/v1/analyze/coverage`
+
+**Description**: Analyze content coverage and identify gaps using AI-powered analysis.
+
+**Authentication**: Required
+
+**Request Body**:
+```json
+{
+  "projectId": "507f1f77bcf86cd799439011",
+  "department": "story",
+  "gatherItems": [
+    {
+      "content": "Plot overview: The story follows...",
+      "summary": "Main plot structure"
+    },
+    {
+      "content": "Character development: Protagonist grows...",
+      "summary": "Character arc"
+    }
+  ],
+  "departmentDescription": "Story department handles narrative, plot structure, pacing, and themes"
+}
+```
+
+**Constraints**:
+- Max items: 100 gather items
+- Required fields: `projectId`, `department`, `gatherItems`
+
+**Response**:
+```json
+{
+  "department": "story",
+  "coverageScore": 75,
+  "analysis": {
+    "coveredAspects": [
+      {
+        "aspect": "Plot Structure",
+        "coverage": 90,
+        "itemCount": 5,
+        "quality": "excellent"
+      }
+    ],
+    "gaps": [
+      {
+        "aspect": "Pacing",
+        "coverage": 20,
+        "itemCount": 1,
+        "severity": "high",
+        "suggestion": "Add detailed pacing breakdown for each act"
+      }
+    ],
+    "recommendations": [
+      "Focus next iteration on pacing details",
+      "Add dialogue samples to demonstrate character voices"
+    ]
+  },
+  "itemDistribution": {
+    "plot": 8,
+    "character": 5,
+    "theme": 3
+  },
+  "qualityMetrics": {
+    "depth": 72,
+    "breadth": 68,
+    "coherence": 85,
+    "actionability": 70
+  },
+  "timing": {
+    "embedding_time_ms": 300,
+    "analysis_time_ms": 450,
+    "total_time_ms": 750
+  }
+}
+```
+
+**Example**:
+```bash
+curl -X POST https://brain.ft.tc/api/v1/analyze/coverage \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "507f1f77bcf86cd799439011",
+    "department": "story",
+    "gatherItems": [
+      {
+        "content": "Plot overview: Hero journey through challenges",
+        "summary": "Main plot"
+      }
+    ]
+  }'
+```
+
+---
+
 ## Integration Examples
 
 ### Python Integration
@@ -374,6 +677,81 @@ class BrainServiceClient:
             response.raise_for_status()
             return response.json()
 
+    async def batch_create_nodes(self, nodes: list):
+        """Create multiple nodes in a single batch request."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/api/v1/nodes/batch",
+                headers=self.headers,
+                json={"nodes": nodes},
+                timeout=60.0  # Longer timeout for batch operations
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def search_duplicates(self, content: str, project_id: str, threshold: float = 0.90):
+        """Search for duplicate content."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/api/v1/search/duplicates",
+                headers=self.headers,
+                json={
+                    "content": content,
+                    "projectId": project_id,
+                    "threshold": threshold,
+                    "limit": 10
+                },
+                timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_department_context(
+        self,
+        project_id: str,
+        department: str,
+        previous_departments: list = None
+    ):
+        """Get context from previous departments."""
+        params = {
+            "projectId": project_id,
+            "department": department,
+            "limit": 20
+        }
+        if previous_departments:
+            params["previousDepartments"] = previous_departments
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/api/v1/context/department",
+                headers=self.headers,
+                params=params,
+                timeout=60.0  # LLM operations take longer
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def analyze_coverage(
+        self,
+        project_id: str,
+        department: str,
+        gather_items: list
+    ):
+        """Analyze content coverage."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/api/v1/analyze/coverage",
+                headers=self.headers,
+                json={
+                    "projectId": project_id,
+                    "department": department,
+                    "gatherItems": gather_items
+                },
+                timeout=60.0  # LLM operations take longer
+            )
+            response.raise_for_status()
+            return response.json()
+
 # Usage Example
 async def main():
     client = BrainServiceClient(api_key="YOUR_API_KEY")
@@ -403,6 +781,50 @@ async def main():
     # Get statistics
     stats = await client.get_stats()
     print(f"Total nodes: {stats['totalNodes']}")
+
+    # Batch create nodes
+    batch_result = await client.batch_create_nodes([
+        {
+            "type": "GatherItem",
+            "content": "Story premise: Hero's journey",
+            "projectId": "507f1f77bcf86cd799439011",
+            "properties": {"department": "story"}
+        },
+        {
+            "type": "GatherItem",
+            "content": "Character description: Brave protagonist",
+            "projectId": "507f1f77bcf86cd799439011",
+            "properties": {"department": "character"}
+        }
+    ])
+    print(f"Created {batch_result['created']} nodes in {batch_result['timing']['total_time_ms']:.2f}ms")
+
+    # Check for duplicates
+    duplicates = await client.search_duplicates(
+        content="Story premise: Hero's journey",
+        project_id="507f1f77bcf86cd799439011",
+        threshold=0.85
+    )
+    print(f"Found {len(duplicates['duplicates'])} potential duplicates")
+
+    # Get department context
+    context = await client.get_department_context(
+        project_id="507f1f77bcf86cd799439011",
+        department="character",
+        previous_departments=["story"]
+    )
+    print(f"Aggregated {context['totalNodesAggregated']} nodes from previous departments")
+
+    # Analyze coverage
+    coverage = await client.analyze_coverage(
+        project_id="507f1f77bcf86cd799439011",
+        department="story",
+        gather_items=[
+            {"content": "Plot overview", "summary": "Main plot"},
+            {"content": "Character arcs", "summary": "Character development"}
+        ]
+    )
+    print(f"Coverage score: {coverage['coverageScore']}%")
 
 # Run
 asyncio.run(main())
@@ -1248,12 +1670,42 @@ curl -X POST https://brain.ft.tc/api/v1/nodes \
   -d '{"type":"character","content":"Description","projectId":"project_id","properties":{}}'
 ```
 
+### Batch Create Nodes (v1.1.0)
+```bash
+curl -X POST https://brain.ft.tc/api/v1/nodes/batch \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"nodes":[{"type":"GatherItem","content":"Content","projectId":"507f1f77bcf86cd799439011","properties":{}}]}'
+```
+
 ### Search
 ```bash
 curl -X POST https://brain.ft.tc/api/v1/search \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query":"search query","project_id":"project_id","top_k":5}'
+```
+
+### Search Duplicates (v1.1.0)
+```bash
+curl -X POST https://brain.ft.tc/api/v1/search/duplicates \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Text to check","projectId":"507f1f77bcf86cd799439011","threshold":0.90}'
+```
+
+### Get Department Context (v1.1.0)
+```bash
+curl -X GET "https://brain.ft.tc/api/v1/context/department?projectId=507f1f77bcf86cd799439011&department=character&previousDepartments=story" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Analyze Coverage (v1.1.0)
+```bash
+curl -X POST https://brain.ft.tc/api/v1/analyze/coverage \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"projectId":"507f1f77bcf86cd799439011","department":"story","gatherItems":[{"content":"Plot","summary":"Main"}]}'
 ```
 
 ### Get Stats
@@ -1265,4 +1717,14 @@ curl -H "Authorization: Bearer YOUR_API_KEY" https://brain.ft.tc/api/v1/stats
 ```bash
 curl https://brain.ft.tc/health
 ```
+
+---
+
+## Additional Documentation
+
+For more detailed information about the new batch endpoints:
+- **Batch Endpoints Guide**: `/docs/BATCH_ENDPOINTS_GUIDE.md`
+- **Implementation Summary**: `/docs/IMPLEMENTATION_SUMMARY.md`
+- **Deployment Guide**: `/docs/DEPLOYMENT_GUIDE.md`
+- **Changelog**: `/CHANGELOG.md`
 
