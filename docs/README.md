@@ -8,6 +8,13 @@ The MCP Brain Service is a pure infrastructure service for storing and retrievin
 
 ## Quick Links
 
+### 🆕 New in v1.1.0
+- **[How to Use](how-to-use.md)** - Complete API usage guide with all 10 endpoints
+- **[Batch Endpoints Guide](BATCH_ENDPOINTS_GUIDE.md)** - Detailed guide for new batch endpoints
+- **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Deployment instructions
+- **[Changelog](../CHANGELOG.md)** - Version history and changes
+
 ### Architecture & Design
 - [Architecture Decision](./architecture-decision.md) - Why data preparation belongs in the app
 - [Retriv Integration Plan](./retriv-integration-plan.md) - How to enhance queries with hybrid search
@@ -293,23 +300,30 @@ echo $NEO4J_USER
 
 ## Roadmap
 
-### Current (v1.0)
+### ✅ Completed (v1.1.0) - January 2025
 - ✅ Neo4j storage
-- ✅ Jina embeddings
+- ✅ Jina embeddings v4
 - ✅ MCP protocol
-- 🚧 Retriv hybrid search (in progress)
+- ✅ REST API routes (10 endpoints)
+- ✅ Authentication (API key)
+- ✅ Batch node creation (up to 50 nodes)
+- ✅ Semantic duplicate detection
+- ✅ AI-powered department context aggregation (OpenRouter LLM)
+- ✅ Content coverage analysis with LLM
+- ✅ Comprehensive documentation
 
-### Future (v1.1)
-- [ ] REST API routes
-- [ ] Authentication
-- [ ] Rate limiting
-- [ ] Caching layer
+### In Progress (v1.2)
+- 🚧 Retriv hybrid search
+- 🚧 Rate limiting
+- 🚧 Prometheus metrics
+- 🚧 Redis caching layer
 
 ### Future (v2.0)
 - [ ] Multi-modal search (images + text)
-- [ ] Real-time updates
-- [ ] Advanced analytics
-- [ ] Multi-tenancy
+- [ ] Real-time updates via WebSocket
+- [ ] Advanced analytics dashboard
+- [ ] Multi-tenancy support
+- [ ] GraphQL API
 
 ## License
 
